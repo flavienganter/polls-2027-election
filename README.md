@@ -6,7 +6,7 @@ Estimates of the voting intentions for the first round of the 2027 French Presid
 
 Evolutions of voting intentions since February 2026 (medians of the posterior distributions, and 95% and 50% high density credible intervals) and official results:
 
-![](https://github.com/flavienganter/polls-2027-election/blob/main/polls_france27_evolution_final.png?raw=true)
+![](https://github.com/flavienganter/polls-2027-election/blob/main/polls_france27_evolution_evolution.png?raw=true)
 
 ## Model
 
