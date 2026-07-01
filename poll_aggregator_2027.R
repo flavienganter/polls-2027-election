@@ -351,22 +351,21 @@ plot_spline_estimates <- plot_spline_estimates %>%
 
 # Define candidate colors
 candidate_colors <- c(
-  "#ff1300",
-  "#b30d00",
-  "#ff0099", 
-  "#00b050",
-  "#ff6600",
-  "#4e91f7",
-  "#0070c0",
-  "#0000008b",
-  "#002060",
-  "#000000"
+  "Nathalie Arthaud" = "#ff1300",
+  "Jean-Luc Mélenchon" = "#b30d00",
+  "Fabien Roussel" = "#ff0099", 
+  "Marine Tondelier" = "#00b050",
+  "Raphaël Glucksmann" = "#ff6600",
+  "Édouard Philippe" = "#4e91f7",
+  "Bruno Retailleau" = "#0070c0",
+  "Nicolas Dupont-Aignan" = "#000000",
+  "Jordan Bardella" = "#002060",
+  "Éric Zemmour" = "#5b3c11"
 )
 
 # Generate plot: day to day
 poll_plot <- plot_spline_estimates %>% 
   mutate(
-    label_candidate = candidate,
     label = if_else(
       date == max(date), 
       paste0(
@@ -425,8 +424,8 @@ poll_plot <- plot_spline_estimates %>%
               color = NA) +
   
   # Candidate labels
-  geom_text(aes(x = date + 1, 
-                y = median_label * 100, 
+  geom_text(aes(x = date + 2, 
+                y = median_label * 100 - .3, 
                 label = label), 
             na.rm = TRUE,
             hjust = 0, 
@@ -436,61 +435,78 @@ poll_plot <- plot_spline_estimates %>%
             size = 3) +
   
   # Show latest poll's date
-  annotate("segment", x = max(plot_spline_estimates$date), y = 0, xend = max(plot_spline_estimates$date), yend = 45,
-           size = .4) +
-  annotate(geom = "text", x = max(plot_spline_estimates$date), y = 45.5, family = "Open Sans Condensed",
-           label = format(max(plot_spline_estimates$date), "%d %B %Y"), size = 3) +
+  annotate(
+    "segment", 
+    x = max(plot_spline_estimates$date), 
+    y = 0, 
+    xend = max(plot_spline_estimates$date), 
+    yend = 43.5,
+    size = .4
+  ) +
+  annotate(
+    geom = "text", 
+    x = max(plot_spline_estimates$date), 
+    y = 44.75, 
+    family = "Open Sans Condensed",
+    label = format(max(plot_spline_estimates$date), "%d %B %Y"),
+    size = 3
+  ) +
   
   # Show election date
-  annotate("segment",
-           x = as.Date("2027-04-18"), 
-           y = 0, 
-           xend = as.Date("2027-04-18"), 
-           yend = 43.5,
-           size = .4) +
-  annotate(geom = "text", 
-           x = as.Date("2027-04-18"), 
-           y = 44.75, 
-           label = "Premier tour", 
-           family = "Open Sans Condensed",
-           size = 3) +
+  annotate(
+    "segment",
+    x = as.Date("2027-04-18"), 
+    y = 0, 
+    xend = as.Date("2027-04-18"), 
+    yend = 43.5,
+    size = .4
+  ) +
+  annotate(
+    geom = "text", 
+    x = as.Date("2027-04-18"), 
+    y = 44.75, 
+    label = "Premier tour", 
+    family = "Open Sans Condensed",
+    size = 3
+  ) +
   
   # Define labs
   labs(x = "", 
        y = "Intentions de votes (% votes exprimés)",
-       title = "Intentions de vote à l'élection européenne française de 2027",
+       title = "Intentions de vote à l'élection présidentielle française de 2027",
        subtitle = "Depuis février 2026",
-       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par BVA, Cluster17, Elabe, Harris Interactive, IFOP, IPSOS, Odoxa, OpinionWay et ViaVoice depuis septembre 2023 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à l'aide d'un modèle bayésien tenant compte \ndes principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 50%). Pour chaque candidat, la ligne solide relie les médianes des distributions a posteriori à chaque date, et la zone colorée représente la partie la plus dense de la distribution a posteriori (95% / 50%) des \ndistributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".")) +
-       #caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par BVA, Cluster17, Elabe, Harris Interactive, IFOP, IPSOS, Kantar, Odoxa, et OpinionWay depuis septembre 2021 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à l'aide d'un modèle bayésien tenant compte \ndes principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 50%)Pour chaque candidat, la ligne solide relie les médianes des distributions a posteriori à chaque date, et la zone colorée représente la partie la plus dense de la distribution a posteriori (95% / 50%) des \ndistributions a posteriori. Dernière mise à jour: ", format(Sys.time(), "%d %B %Y"), ".")) +
+       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa, OpinionWay et ViaVoice depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à l'aide d'un modèle bayésien tenant compte \ndes principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 50%). Pour chaque candidat, la ligne solide relie les médianes des distributions a posteriori à chaque date, et la zone colorée représente la partie la plus dense de la distribution a posteriori (95% / 50%) des \ndistributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".")) +
   
   # Specify plot theme
   theme_minimal() +
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_blank(),
-        panel.grid.major.y = element_line(color = "#2b2b2b", 
-                                          linetype = "dotted", 
-                                          size = 0.05),
-        text = element_text(family = "Open Sans Condensed", 
-                            size = 7.5),
-        axis.text = element_text(size = 8),
-        axis.text.x = element_text(hjust = 0),
-        axis.text.y = element_text(margin = margin(r = -2)),
-        axis.title = element_blank(),
-        axis.line.x = element_line(color = "#2b2b2b", 
-                                   size = 0.15),
-        axis.ticks.x = element_line(color = "#2b2b2b", 
-                                    size = 0.15),
-        axis.ticks.length = unit(.2, "cm"),
-        plot.title = element_text(size = 20, 
-                                  family = "Open Sans Condensed", 
-                                  face = "bold"),
-        plot.title.position = "plot",
-        plot.subtitle = element_text(size = 12),
-        legend.position = "none",
-        plot.caption = element_text(color = "gray30", 
-                                    hjust = 0, 
-                                    margin = margin(t = 15)),
-        plot.margin = unit(rep(0.5, 4), "cm")) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_line(color = "#2b2b2b", 
+                                      linetype = "dotted", 
+                                      size = 0.05),
+    text = element_text(family = "Open Sans Condensed", 
+                        size = 7.5),
+    axis.text = element_text(size = 8),
+    axis.text.x = element_text(hjust = 0),
+    axis.text.y = element_text(margin = margin(r = -2)),
+    axis.title = element_blank(),
+    axis.line.x = element_line(color = "#2b2b2b", 
+                               size = 0.15),
+    axis.ticks.x = element_line(color = "#2b2b2b", 
+                                size = 0.15),
+    axis.ticks.length = unit(.2, "cm"),
+    plot.title = element_text(size = 20, 
+                              family = "Open Sans Condensed", 
+                              face = "bold"),
+    plot.title.position = "plot",
+    plot.subtitle = element_text(size = 12),
+    legend.position = "none",
+    plot.caption = element_text(color = "gray30", 
+                                hjust = 0, 
+                                margin = margin(t = 15)),
+    plot.margin = unit(rep(0.5, 4), "cm")
+  ) +
   
   # Candidate colors
   guides(color = guide_legend(nrow = 3, byrow = TRUE)) +
@@ -502,7 +518,7 @@ poll_plot <- plot_spline_estimates %>%
     expand = c(.005,1), 
     date_breaks = "1 month",
     date_labels = "%B",
-    limits = c(as.Date("2026-03-01"), as.Date("2027-06-25"))
+    limits = c(as.Date("2026-03-01"), as.Date("2027-05-15"))
   ) +
   
   # Percent axis
@@ -517,12 +533,12 @@ poll_plot <- plot_spline_estimates %>%
 
 ## Export plot
 ggsave(poll_plot, 
-       filename = "PollsFrance2024_evolution.pdf",
+       filename = "polls_france27_evolution.pdf",
        height = 6, 
        width = 10, 
        device = cairo_pdf)
 ggsave(poll_plot, 
-       filename = "PollsFrance2024_evolution.png",
+       filename = "polls_france27_evolution.png",
        height = 6, 
        width = 10, 
        device = "png", 
@@ -535,33 +551,30 @@ ggsave(poll_plot,
 
 plot_inst_estimates <- plot_spline_estimates %>% 
   filter(date == max(date))  %>%
-  mutate(label = paste0(unlist(lapply(median*1000, round))/10, "%"),
-         label = ifelse(label == "0.5%", "   0.5%", label))
-plot_inst_estimates$candidate <- factor(plot_inst_estimates$candidate,
-                                        levels = as.vector(plot_inst_estimates$candidate
-                                                           [rev(order(plot_inst_estimates$median))]))
+  mutate(
+    label = paste0(unlist(lapply(median*1000, round))/10, "%"),
+    label = ifelse(label == "0.5%", "   0.5%", label)
+  )
+plot_inst_estimates$candidate <- factor(
+  plot_inst_estimates$candidate,
+  levels = as.vector(plot_inst_estimates$candidate[rev(order(plot_inst_estimates$median))])
+)
 
 ## Create plot
 
 # Define candidate colors
-candidate_colors <- c("#00b050",
-                      "#ff1300",
-                      "#0070c0",
-                      "#ff6600",
-                      "#b30d00",
-                      "#f7b4b4",
-                      "#002060",
-                      "black")[match(as.vector(plot_inst_estimates$candidate
-                                                 [rev(order(plot_inst_estimates$median))]),
-                                       c("Liste EELV", 
-                                         "Liste LFI",  
-                                         "Liste LR",
-                                         "Liste LREM", 
-                                         "Liste PCF", 
-                                         "Liste PS-PP", 
-                                         "Liste R!", 
-                                         "Liste RN"))]
-
+candidate_colors <- c(
+  "Nathalie Arthaud" = "#ff1300",
+  "Jean-Luc Mélenchon" = "#b30d00",
+  "Fabien Roussel" = "#ff0099", 
+  "Marine Tondelier" = "#00b050",
+  "Raphaël Glucksmann" = "#ff6600",
+  "Édouard Philippe" = "#4e91f7",
+  "Bruno Retailleau" = "#0070c0",
+  "Nicolas Dupont-Aignan" = "#000000",
+  "Jordan Bardella" = "#002060",
+  "Éric Zemmour" = "#5b3c11"
+)
 
 # Generate plot: last estimate
 inst_plot <- plot_inst_estimates %>% 
@@ -599,9 +612,9 @@ inst_plot <- plot_inst_estimates %>%
   # Define labs
   labs(x = "", 
        y = "Intentions de votes (% votes exprimés)",
-       title = "Intentions de vote à l'élection européenne française de 2024",
+       title = "Intentions de vote à l'élection présidentielle française de 2027",
        subtitle = paste("Au", format(Sys.time(), "%d %B %Y")),
-       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par BVA, Cluster17, Elabe, Harris Interactive, IFOP, IPSOS, Odoxa, OpinionWay et ViaVoice depuis juin 2023 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à \nl'aide d'un modèle bayésien tenant compte des principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 90% / 80% / 50%) des distributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".")) +
+       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa et OpinionWay depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à \nl'aide d'un modèle bayésien tenant compte des principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 90% / 80% / 50%) des distributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".")) +
   
   # Specify plot theme
   coord_flip() +
@@ -643,18 +656,18 @@ inst_plot <- plot_inst_estimates %>%
   # Percent axis
   scale_y_continuous(labels = function(x) paste0(x, "%"), 
                      expand = c(0, 0), 
-                     breaks = seq(0, 35, 5), 
-                     lim = c(0, 36))
+                     breaks = seq(0, 40, 5), 
+                     lim = c(0, 43.5))
 
 
 ## Export plot
 ggsave(inst_plot, 
-       filename = "PollsFrance2024_latest.pdf",
+       filename = "polls_france27_latest.pdf",
        height = 7.5, 
        width = 10,
        device = cairo_pdf)
 ggsave(inst_plot, 
-       filename = "PollsFrance2024_latest.png",
+       filename = "polls_france27_latest.png",
        height = 7.5, 
        width = 10, 
        device = "png", 
