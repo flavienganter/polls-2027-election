@@ -7,7 +7,7 @@
 
 
 
-# PRELIMINARIES -----------------------------------------------------------------------------------------
+# PRELIMINARIES ------------------------------------------------------------------------------------
 
 # Clear working space
 rm(list = ls())
@@ -44,7 +44,7 @@ subset(systemfonts::system_fonts(), grepl("Open Sans Condensed", family))
   
   # Function to center and standardize continuous and categorical variables
   # (helpful for Bayesian prior, see Gelman et al. 2008)
-  scale_cont <- function(variable) (variable - mean(variable)) / (2 * weighted.sd(variable))
+  scale_cont <- function(variable) (variable - mean(variable)) / (2 * sd(variable))
   scale_factor <- function(variable) {
     scale_dummy <- function(dummy) ifelse(dummy == 1, 1 - mean(dummy == 1), - mean(dummy == 1))
     L <- length(unique(variable))
@@ -77,6 +77,11 @@ data <- read_excel("polls_data_2027.xlsx") %>%
   
   # Create hypothesis ID
   mutate(id_hyp = 1:n()) %>% 
+  
+  # Flag hypotheses with MLP
+  mutate(
+    ismlp = !is.na(c_mlp)
+  ) %>%
     
   # Remove irrelavant scenarios
   filter(n_wgt == 1) %>%
@@ -84,10 +89,9 @@ data <- read_excel("polls_data_2027.xlsx") %>%
   # Remove Hollande, de Villepin, Le Pen, Attal
   filter(
     is.na(c_hlld),
-    is.na(c_attl),
-    is.na(c_mlp)
+    is.na(c_attl)
   ) %>%
-  select(-c_hlld, -c_villpn, -c_mlp, -c_attl) %>% 
+  select(-c_hlld, -c_villpn, -c_attl) %>%
   
   # Wide to long
   gather(candidate, share, c_arthd:c_zemmr) %>% 
@@ -127,6 +131,7 @@ data <- read_excel("polls_data_2027.xlsx") %>%
   # Create covariates
   mutate(
     gunie_sc = scale_factor(variable = g_unie),
+    ismlp_sc = scale_factor(variable = ismlp),
     #rolling = (poll_type == "rolling") * 1L,
     #rolling_sc = scale_factor(variable = rolling),
     unsure_1 = scale_factor(variable = unsure)[[1]],
@@ -144,7 +149,7 @@ data <- read_excel("polls_data_2027.xlsx") %>%
       candidate == "c_philp" ~ 6,
       candidate == "c_rtll" ~ 7,
       candidate == "c_nda" ~ 8,
-      candidate == "c_bardella" ~ 9,
+      candidate %in% c("c_bardella", "c_mlp") ~ 9,
       candidate == "c_zemmr" ~ 10
     )
   ) %>% 
@@ -219,8 +224,9 @@ data_spline_model <- list(
   P               = length(unique(data_i$id_poll)),
   id_house        = data_i$id_house,
   F               = length(unique(data_i$id_house)),
-  X               = data_i[, c("unsure_1", "unsure_2", "gunie_sc")],
+  X               = data_i[, c("unsure_1", "unsure_2", "gunie_sc", "ismlp_sc")],
   g_unie_b         = max(data_i$gunie_sc),
+  ismlp_b         = max(data_i$ismlp_sc),
   #rolling_b       = min(data_i$rolling_sc),
   num_knots       = num_knots,
   knots           = unname(quantile(1:max(data_i$id_date_end), probs = seq(from = 0, to = 1, length.out = num_knots))),
@@ -329,7 +335,7 @@ plot_spline_estimates <- plot_spline_estimates %>%
       candidate == 6 ~ "Philippe",
       candidate == 7 ~ "Retailleau",
       candidate == 8 ~ "Dupont-Aignan",
-      candidate == 9 ~ "Bardella",
+      candidate == 9 ~ "Le Pen",
       candidate == 10 ~ "Zemmour"
       )),
     candidate = as.factor(case_when(
@@ -341,7 +347,7 @@ plot_spline_estimates <- plot_spline_estimates %>%
       candidate == 6 ~ "Édouard Philippe",
       candidate == 7 ~ "Bruno Retailleau",
       candidate == 8 ~ "Nicolas Dupont-Aignan",
-      candidate == 9 ~ "Jordan Bardella",
+      candidate == 9 ~ "Marine Le Pen",
       candidate == 10 ~ "Éric Zemmour"
       ))
     )
@@ -359,7 +365,7 @@ candidate_colors <- c(
   "Édouard Philippe" = "#4e91f7",
   "Bruno Retailleau" = "#0070c0",
   "Nicolas Dupont-Aignan" = "#000000",
-  "Jordan Bardella" = "#002060",
+  "Marine Le Pen" = "#002060",
   "Éric Zemmour" = "#5b3c11"
 )
 
@@ -572,7 +578,7 @@ candidate_colors <- c(
   "Édouard Philippe" = "#4e91f7",
   "Bruno Retailleau" = "#0070c0",
   "Nicolas Dupont-Aignan" = "#000000",
-  "Jordan Bardella" = "#002060",
+  "Marine Le Pen" = "#002060",
   "Éric Zemmour" = "#5b3c11"
 )
 

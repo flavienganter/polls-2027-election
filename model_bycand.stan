@@ -25,8 +25,9 @@ data {
   array[N] int id_date;
   array[N] int id_house;
   int F;
-  matrix[N,3] X;
+  matrix[N,4] X;
   real g_unie_b;
+  real ismlp_b;
   //real rolling_b;
   
   // Splines
@@ -48,7 +49,7 @@ parameters {
   // Covariates
   array[P] real mu;
   array[F] real lambda;
-  array[3] real beta;
+  array[4] real beta;
   array[2] real nu;
   real<lower=0> tau_mu;
   real<lower=0> tau_lambda;
@@ -85,7 +86,7 @@ transformed parameters {
                                 tau_lambda * lambda[id_house[i]] + // House effect
                                 X[i,1] * (beta[1] + nu[1] * (id_date[i] - 1)) + // Population definition
                                 X[i,2] * (beta[2] + nu[2] * (id_date[i] - 1)) +
-                                X[i,3] * beta[3]);
+                                X[i,3] * beta[3] + X[i,4] * beta[4]);
     
     
     // Rounding error
@@ -145,6 +146,6 @@ generated quantities {
   array[D] real<lower=0,upper=1> prob;
   for (d in 1:D)
       prob[d] = inv_logit(alpha0 * d + to_row_vector(alpha) * S[,d] + 
-                              g_unie_b * beta[3]);
+                              g_unie_b * beta[3] + ismlp_b * beta[4]);
       
 }
