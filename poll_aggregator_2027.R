@@ -91,7 +91,7 @@ data <- read_excel("polls_data_2027.xlsx") %>%
     is.na(c_hlld),
     is.na(c_attl)
   ) %>%
-  select(-c_hlld, -c_villpn, -c_attl) %>%
+  select(-c_hlld, -c_villpn, -c_attl, -c_lisnard) %>%
   
   # Wide to long
   gather(candidate, share, c_arthd:c_zemmr) %>% 
