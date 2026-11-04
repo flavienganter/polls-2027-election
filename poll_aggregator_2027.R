@@ -73,28 +73,71 @@ subset(systemfonts::system_fonts(), grepl("Open Sans Condensed", family))
   
 # SHAPE DATA --------------------------------------------------------------------------------------------
 
-data <- read_excel("polls_data_2027.xlsx") %>% 
-  
-  # Create hypothesis ID
-  mutate(id_hyp = 1:n()) %>% 
-  
-  # Flag hypotheses with MLP
-  mutate(
-    ismlp = !is.na(c_mlp)
-  ) %>%
-    
-  # Remove irrelavant scenarios
+## Candidates and scenario dummies ----
+
+  # Modeled candidates (column -> candidate ID)
+  candidate_ids <- c(
+    c_arthd = 1, c_melch = 2, c_roussl = 3, c_tondl = 4, c_glcks = 5,
+    c_philp = 6, c_rtll = 7, c_nda = 8, c_bardella = 9, c_mlp = 9,
+    c_zemmr = 10, c_attl = 11, c_lisnard = 12
+  )
+  n_candidates <- 12
+
+  # Scenario dummies (relative to the reference scenario: Le Pen,
+  # Philippe without Attal, Glucksmann, Roussel, Tondelier, Retailleau,
+  # Zemmour, no Ruffin / Lisnard / Villepin)
+  scen_dummies <- c("d_attal_only", "d_attal_plus", "d_hollande", "d_faure", "d_ruffin",
+                   "d_no_tondl", "d_no_roussl", "d_lisnard", "d_villepin", "d_mlp")
+
+  # Value of each dummy in the reference scenario, by candidate
+  # (Attal: Attal instead of Philippe; Lisnard: Lisnard running)
+  ref_scenario <- function(cand) {
+    ref <- setNames(rep(0, length(scen_dummies)), scen_dummies)
+    ref["d_mlp"] <- 1
+    if (cand == 11) ref["d_attal_only"] <- 1
+    if (cand == 12) ref["d_lisnard"] <- 1
+    ref
+  }
+
+data_wide <- read_excel("polls_data_2027.xlsx") %>%
+
+  # Create scenario ID
+  mutate(id_scen = 1:n()) %>%
+
+  # Remove irrelevant scenarios
   filter(n_wgt == 1) %>%
-    
-  # Remove Hollande, de Villepin, Le Pen, Attal
+
+  # Remove scenarios that cannot be modeled (elements observed too rarely)
   filter(
-    is.na(c_hlld),
-    is.na(c_attl)
+    is.na(c_drmnn), is.na(c_lcrn), is.na(c_lemaire),                    # Other bloc central candidates
+    is.na(c_royal), is.na(c_guedj), is.na(c_maurel),                     # Other PS candidates
+    (!is.na(c_glcks)) + (!is.na(c_hlld)) + (!is.na(c_faure)) == 1,      # Exactly one PS candidate
+    !is.na(c_philp) | !is.na(c_attl),                                    # Philippe and/or Attal
+    !is.na(c_rtll),                                                      # Retailleau running
+    !is.na(c_zemmr), is.na(c_knafo)                                      # Zemmour (not Knafo)
   ) %>%
-  select(-c_hlld, -c_villpn, -c_attl, -c_lisnard) %>%
-  
-  # Wide to long
-  gather(candidate, share, c_arthd:c_zemmr) %>% 
+
+  # Scenario dummies
+  # (Dupont-Aignan / Arthaud absent, Bouamrane, Bonnal, Polony, Bertrand: ignored)
+  mutate(
+    d_attal_only = 1 * (!is.na(c_attl) & is.na(c_philp)),
+    d_attal_plus = 1 * (!is.na(c_attl) & !is.na(c_philp)),
+    d_hollande   = 1 * !is.na(c_hlld),
+    d_faure      = 1 * !is.na(c_faure),
+    d_ruffin     = 1 * !is.na(c_ruffin),
+    d_no_tondl   = 1 * is.na(c_tondl),
+    d_no_roussl  = 1 * is.na(c_roussl),
+    d_lisnard    = 1 * !is.na(c_lisnard),
+    d_villepin   = 1 * !is.na(c_villpn),
+    d_mlp        = 1 * !is.na(c_mlp)
+  )
+
+data <- data_wide %>%
+
+  # Wide to long (modeled candidates only)
+  select(-any_of(setdiff(grep("^c_", names(data_wide), value = TRUE), names(candidate_ids)))) %>%
+  mutate(across(all_of(names(candidate_ids)), as.character)) %>%
+  gather(candidate, share, all_of(names(candidate_ids))) %>%
   
   # Remove rows corresponding to untested candidates
   filter(!is.na(share)) %>% 
@@ -128,31 +171,15 @@ data <- read_excel("polls_data_2027.xlsx") %>%
   # Rename and weight total n variable
   mutate(tot_eff = round(n * n_wgt)) %>% 
   
-  # Create covariates
+  # Create population-definition covariates
+  # (scenario dummies are centered candidate by candidate in the model loop)
   mutate(
-    gunie_sc = scale_factor(variable = g_unie),
-    ismlp_sc = scale_factor(variable = ismlp),
-    #rolling = (poll_type == "rolling") * 1L,
-    #rolling_sc = scale_factor(variable = rolling),
     unsure_1 = scale_factor(variable = unsure)[[1]],
     unsure_2 = scale_factor(variable = unsure)[[2]]
-  ) %>% 
-  
+  ) %>%
+
   # Create a candidate ID
-  mutate(
-    id_candidate = case_when(
-      candidate == "c_arthd" ~ 1,
-      candidate == "c_melch" ~ 2,
-      candidate == "c_roussl" ~ 3,
-      candidate == "c_tondl" ~ 4,
-      candidate == "c_glcks" ~ 5,
-      candidate == "c_philp" ~ 6,
-      candidate == "c_rtll" ~ 7,
-      candidate == "c_nda" ~ 8,
-      candidate %in% c("c_bardella", "c_mlp") ~ 9,
-      candidate == "c_zemmr" ~ 10
-    )
-  ) %>% 
+  mutate(id_candidate = unname(candidate_ids[candidate])) %>%
   
   # Create a house ID
   group_by(house) %>% 
@@ -174,11 +201,12 @@ saveRDS(data, file = "polls_data_2027.rds")
 
 # MODEL -------------------------------------------------------------------------------------------------
 
-for (i in 1:10) {
-  
+for (i in 1:n_candidates) {
+
 # Keep data for one candidate
-data_i <- data %>% 
-  filter(id_candidate == i) %>% 
+data_i <- data %>%
+  filter(id_candidate == i) %>%
+  arrange(id_scen) %>%
   group_by(id_poll) %>% mutate(id_poll = cur_group_id()) %>% ungroup() %>% 
   group_by(id_house) %>% mutate(id_house = cur_group_id()) %>% ungroup() %>% 
   group_by(rounding_ind) %>%
@@ -189,13 +217,40 @@ data_i <- data %>%
          r_3 = ifelse(rounding_ind == 3, rr, 0),
          r_4 = ifelse(rounding_ind == 4, rr, 0),
          r_5 = ifelse(rounding_ind == 5, rr, 0),
-         r_6 = ifelse(rounding_ind == 6, rr, 0))
+         r_6 = ifelse(rounding_ind == 6, rr, 0)) %>%
+  ungroup()
 
-# Define splines 
-num_knots     <- 4
+# Restrict the spline to the candidate's observation period: day 1 is the
+# first fieldwork day of the first poll testing the candidate, and the last day
+# is the end of the most recent poll (all candidates). This changes nothing for
+# candidates tested since February 26 (date_offset = 0)
+date_offset <- min(data_i$id_date_start) - 1
+data_i <- data_i %>%
+  mutate(
+    id_date     = id_date - date_offset,
+    id_date_end = id_date_end - date_offset
+  )
+D_i <- max(data$id_date_end) - date_offset
+
+# Scenario dummies for this candidate: keep those that vary in the
+# candidate's data (e.g. d_attal_only is always 0 for Philippe, always 1 or 0
+# with d_attal_plus for Attal), center them, and center the reference scenario
+# accordingly
+x_ref_raw <- ref_scenario(i)
+X_raw     <- as.matrix(data_i[, scen_dummies])
+keep      <- apply(X_raw, 2, function(x) length(unique(x)) > 1)
+if (i == 11) keep["d_attal_only"] <- FALSE # collinear with d_attal_plus in Attal's data
+X_raw     <- X_raw[, keep, drop = FALSE]
+X_means   <- colMeans(X_raw)
+X_scen    <- sweep(X_raw, 2, X_means)
+x_ref     <- x_ref_raw[colnames(X_raw)] - X_means
+cat("Candidate", i, "- scenario dummies:", paste(colnames(X_scen), collapse = ", "), "\n")
+
+# Define splines
+num_knots     <- ifelse(D_i < .75 * max(data$id_date_end), 3, 4) # Smoother spline for short observation periods
 spline_degree <- 3
 num_basis     <- num_knots + spline_degree - 1
-B             <- t(bs(1:max(data_i$id_date_end), df = num_basis, degree = spline_degree, intercept = TRUE))
+B             <- t(bs(1:D_i, df = num_basis, degree = spline_degree, intercept = TRUE))
 
 # Gather data to feed the model
 data_spline_model <- list(
@@ -224,12 +279,12 @@ data_spline_model <- list(
   P               = length(unique(data_i$id_poll)),
   id_house        = data_i$id_house,
   F               = length(unique(data_i$id_house)),
-  X               = data_i[, c("unsure_1", "unsure_2", "gunie_sc", "ismlp_sc")],
-  g_unie_b         = max(data_i$gunie_sc),
-  ismlp_b         = max(data_i$ismlp_sc),
-  #rolling_b       = min(data_i$rolling_sc),
+  U               = as.matrix(data_i[, c("unsure_1", "unsure_2")]),
+  K               = ncol(X_scen),
+  X               = X_scen,
+  x_ref           = as.vector(x_ref),
   num_knots       = num_knots,
-  knots           = unname(quantile(1:max(data_i$id_date_end), probs = seq(from = 0, to = 1, length.out = num_knots))),
+  knots           = unname(quantile(1:D_i, probs = seq(from = 0, to = 1, length.out = num_knots))),
   spline_degree   = spline_degree,
   num_basis       = num_basis,
   D               = ncol(B),
@@ -266,16 +321,7 @@ saveRDS(spline_draws, file = paste0("model_output/model_aggregator_", i, ".rds")
 
 ## Get estimates ----
 
-spline_draws <- get_draws(candidate = 1) %>% 
-  add_column(get_draws(candidate = 2)) %>% 
-  add_column(get_draws(candidate = 3)) %>% 
-  add_column(get_draws(candidate = 4)) %>% 
-  add_column(get_draws(candidate = 5)) %>% 
-  add_column(get_draws(candidate = 6)) %>% 
-  add_column(get_draws(candidate = 7)) %>% 
-  add_column(get_draws(candidate = 8)) %>% 
-  add_column(get_draws(candidate = 9)) %>% 
-  add_column(get_draws(candidate = 10)) 
+spline_draws <- bind_cols(lapply(1:n_candidates, function(c) get_draws(candidate = c)))
 
 
 
@@ -310,47 +356,32 @@ names(plot_spline_estimates) <- c("lower95",
 plot_spline_estimates$coef <- row.names(plot_spline_estimates)
 
 # Name estimates: identify the date and candidate associated with each estimate
+candidate_names <- c(
+  "1" = "Nathalie Arthaud", "2" = "Jean-Luc Mélenchon", "3" = "Fabien Roussel",
+  "4" = "Marine Tondelier", "5" = "Raphaël Glucksmann", "6" = "Édouard Philippe",
+  "7" = "Bruno Retailleau", "8" = "Nicolas Dupont-Aignan", "9" = "Marine Le Pen",
+  "10" = "Éric Zemmour", "11" = "Gabriel Attal", "12" = "David Lisnard"
+)
+candidate_labels <- c(
+  "1" = "Arthaud", "2" = "Mélenchon", "3" = "Roussel", "4" = "Tondelier",
+  "5" = "Glucksmann", "6" = "Philippe", "7" = "Retailleau", "8" = "Dupont-Aignan",
+  "9" = "Le Pen", "10" = "Zemmour", "11" = "Attal*", "12" = "Lisnard**"
+)
+
+# First date at which each candidate was tested (day 1 of the candidate's spline)
+first_date <- data %>% 
+  group_by(id_candidate) %>% 
+  summarise(first_date = as.Date(min(id_date_start) - 1, origin = as.Date("2026-02-26")))
+
 plot_spline_estimates <- plot_spline_estimates %>%
   mutate(
-    date = substr(coef, 6, 8),
-    date = case_when(
-      substr(date, 3, 3) == "," ~ substr(date, 1, 2),
-      substr(date, 2, 2) == "," ~ substr(date, 1, 1),
-      TRUE ~ substr(date, 1, 3)
-    ),
-    date = as.Date(as.numeric(date)-2, origin = as.Date("2026-02-26")),
-    candidate = substr(coef, 7, 11),
-    candidate = case_when(
-      substr(candidate, 1, 1) == "," ~ substr(candidate, 2, 3),
-      substr(candidate, 2, 2) == "," ~ substr(candidate, 3, 4),
-      TRUE ~ substr(candidate, 4, 5)
-    ),
-    candidate = ifelse(substr(candidate, 2, 2) == "]", substr(candidate, 1, 1), candidate),
-    label_candidate = as.factor(case_when(
-      candidate == 1 ~ "Arthaud",
-      candidate == 2 ~ "Mélenchon",
-      candidate == 3 ~ "Roussel",
-      candidate == 4 ~ "Tondelier",
-      candidate == 5 ~ "Glucksmann",
-      candidate == 6 ~ "Philippe",
-      candidate == 7 ~ "Retailleau",
-      candidate == 8 ~ "Dupont-Aignan",
-      candidate == 9 ~ "Le Pen",
-      candidate == 10 ~ "Zemmour"
-      )),
-    candidate = as.factor(case_when(
-      candidate == 1 ~ "Nathalie Arthaud",
-      candidate == 2 ~ "Jean-Luc Mélenchon",
-      candidate == 3 ~ "Fabien Roussel",
-      candidate == 4 ~ "Marine Tondelier",
-      candidate == 5 ~ "Raphaël Glucksmann",
-      candidate == 6 ~ "Édouard Philippe",
-      candidate == 7 ~ "Bruno Retailleau",
-      candidate == 8 ~ "Nicolas Dupont-Aignan",
-      candidate == 9 ~ "Marine Le Pen",
-      candidate == 10 ~ "Éric Zemmour"
-      ))
-    )
+    id_candidate = as.numeric(sub(".*,([0-9]+)\\]$", "\\1", coef)),
+    day = as.numeric(sub("^prob\\[([0-9]+),.*", "\\1", coef)),
+    label_candidate = as.factor(candidate_labels[as.character(id_candidate)]),
+    candidate = as.factor(candidate_names[as.character(id_candidate)])
+  ) %>% 
+  left_join(first_date, by = "id_candidate") %>% 
+  mutate(date = first_date + (day - 1)) # The spline starts at the candidate's first poll
 
 
 ### Create plot
@@ -366,7 +397,9 @@ candidate_colors <- c(
   "Bruno Retailleau" = "#0070c0",
   "Nicolas Dupont-Aignan" = "#000000",
   "Marine Le Pen" = "#002060",
-  "Éric Zemmour" = "#5b3c11"
+  "Éric Zemmour" = "#5b3c11",
+  "Gabriel Attal" = "#f2b705",
+  "David Lisnard" = "#7fa7d9"
 )
 
 # Generate plot: day to day
@@ -481,7 +514,7 @@ poll_plot <- plot_spline_estimates %>%
        y = "Intentions de votes (% votes exprimés)",
        title = "Intentions de vote à l'élection présidentielle française de 2027",
        subtitle = "Depuis février 2026",
-       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa, OpinionWay et ViaVoice depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à l'aide d'un modèle bayésien tenant compte \ndes principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 50%). Pour chaque candidat, la ligne solide relie les médianes des distributions a posteriori à chaque date, et la zone colorée représente la partie la plus dense de la distribution a posteriori (95% / 50%) des \ndistributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".")) +
+       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa, OpinionWay, Verian et YouGov depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à l'aide d'un modèle bayésien tenant compte \ndes principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 50%). Pour chaque candidat, la ligne solide relie les médianes des distributions a posteriori à chaque date, et la zone colorée représente la partie la plus dense de la distribution a posteriori (95% / 50%) des \ndistributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".\n* Gabriel Attal : scénario où il est candidat à la place d'Édouard Philippe. ** David Lisnard : scénario où il est candidat en plus d'Édouard Philippe et de Bruno Retailleau.")) +
   
   # Specify plot theme
   theme_minimal() +
@@ -579,7 +612,9 @@ candidate_colors <- c(
   "Bruno Retailleau" = "#0070c0",
   "Nicolas Dupont-Aignan" = "#000000",
   "Marine Le Pen" = "#002060",
-  "Éric Zemmour" = "#5b3c11"
+  "Éric Zemmour" = "#5b3c11",
+  "Gabriel Attal" = "#f2b705",
+  "David Lisnard" = "#7fa7d9"
 )
 
 # Generate plot: last estimate
@@ -620,7 +655,7 @@ inst_plot <- plot_inst_estimates %>%
        y = "Intentions de votes (% votes exprimés)",
        title = "Intentions de vote à l'élection présidentielle française de 2027",
        subtitle = paste("Au", format(Sys.time(), "%d %B %Y")),
-       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa et OpinionWay depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à \nl'aide d'un modèle bayésien tenant compte des principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 90% / 80% / 50%) des distributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".")) +
+       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa, OpinionWay, Verian et YouGov depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à \nl'aide d'un modèle bayésien tenant compte des principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 90% / 80% / 50%) des distributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".\n* Gabriel Attal : scénario où il est candidat à la place d'Édouard Philippe. ** David Lisnard : scénario où il est candidat en plus d'Édouard Philippe et de Bruno Retailleau.")) +
   
   # Specify plot theme
   coord_flip() +

@@ -25,10 +25,10 @@ data {
   array[N] int id_date;
   array[N] int id_house;
   int F;
-  matrix[N,4] X;
-  real g_unie_b;
-  real ismlp_b;
-  //real rolling_b;
+  matrix[N,2] U;      // Population definition (unsure_1, unsure_2)
+  int<lower=0> K;     // Number of scenario dummies for this candidate
+  matrix[N,K] X;      // Scenario dummies (centered)
+  vector[K] x_ref;    // Reference scenario (centered)
   
   // Splines
   int num_knots;
@@ -49,8 +49,9 @@ parameters {
   // Covariates
   array[P] real mu;
   array[F] real lambda;
-  array[4] real beta;
+  array[2] real beta;
   array[2] real nu;
+  vector[K] gamma;
   real<lower=0> tau_mu;
   real<lower=0> tau_lambda;
   
@@ -84,9 +85,9 @@ transformed parameters {
     theta[i] = inv_logit(alpha0 * id_date[i] + to_row_vector(alpha) * S[,id_date[i]] + // Spline
                                 tau_mu * mu[id_poll[i]] + // Poll effect
                                 tau_lambda * lambda[id_house[i]] + // House effect
-                                X[i,1] * (beta[1] + nu[1] * (id_date[i] - 1)) + // Population definition
-                                X[i,2] * (beta[2] + nu[2] * (id_date[i] - 1)) +
-                                X[i,3] * beta[3] + X[i,4] * beta[4]);
+                                U[i,1] * (beta[1] + nu[1] * (id_date[i] - 1)) + // Population definition
+                                U[i,2] * (beta[2] + nu[2] * (id_date[i] - 1)) +
+                                X[i] * gamma); // Scenario
     
     
     // Rounding error
@@ -129,9 +130,12 @@ model {
     lambda ~ normal(0, 1);
     tau_lambda ~ student_t(3, 0, 1);
     
-    // Population definition and poll type effects
+    // Population definition effects
     beta ~ normal(0, 1);
     nu ~ normal(0, 1);
+    
+    // Scenario effects
+    gamma ~ normal(0, 1);
   
   
   // Likelihood
@@ -141,11 +145,11 @@ model {
 }
 generated quantities {
   
-  // Estimate each candidate's score for every day between March 1
-  // and the date of the most recent poll
+  // Estimate each candidate's score in the reference scenario for every
+  // day between February 26 and the date of the most recent poll
   array[D] real<lower=0,upper=1> prob;
+  real scen_ref = dot_product(x_ref, gamma);
   for (d in 1:D)
-      prob[d] = inv_logit(alpha0 * d + to_row_vector(alpha) * S[,d] + 
-                              g_unie_b * beta[3] + ismlp_b * beta[4]);
+      prob[d] = inv_logit(alpha0 * d + to_row_vector(alpha) * S[,d] + scen_ref);
       
 }

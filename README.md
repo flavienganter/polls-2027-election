@@ -1,6 +1,6 @@
 # A Poll Aggregator for the 2027 French Presidential Election
 
-Estimates of the voting intentions for the first round of the 2027 French Presidential Election (medians of the posterior distributions, and 95%, 90%, 80%, and 50% high density credible intervals) on June 27, 2026:
+Estimates of the voting intentions for the first round of the 2027 French Presidential Election (medians of the posterior distributions, and 95%, 90%, 80%, and 50% high density credible intervals) on November 4, 2026 (reference scenario: Marine Le Pen as the RN candidate, Édouard Philippe as the only centre-right candidate; see below for Gabriel Attal and David Lisnard):
 
 ![](https://github.com/flavienganter/polls-2027-election/blob/main/polls_france27_latest.png?raw=true)
 
@@ -10,7 +10,7 @@ Evolutions of voting intentions since February 2026 (medians of the posterior di
 
 ## Model
 
-I use data from all voting intention polls fielded since February 26, 2026, based on the survey reports available on the [Commission des sondages website](https://www.commission-des-sondages.fr/notices/). I build on [Heidemanns, Gelman and Morris (2020)](https://hdsr.mitpress.mit.edu/pub/nw1dzd02/release/1) to build a poll aggregator that does just that—aggregating polls—with no prediction intention whatsoever. The model is estimated with Stan.
+I use data from all voting intention polls fielded since February 26, 2026, based on the survey reports available on the [Commission des sondages website](https://www.commission-des-sondages.fr/notices/). The data (`polls_data_2027.xlsx`) include every first-round scenario tested in each poll, along with its sample size and the exact subsample the published results were computed on. I build on [Heidemanns, Gelman and Morris (2020)](https://hdsr.mitpress.mit.edu/pub/nw1dzd02/release/1) to build a poll aggregator that does just that—aggregating polls—with no prediction intention whatsoever. The model is estimated with Stan.
 
 For each scenario $i$ (part of poll $p\ =\ p_{[i]}$) and each candidate $c$, $s_{ci}^{\*}$ is the (adjusted) share of respondents who indicated support for candidate $c$. $s_{ci}^{\*}$ is typically not available, as polling firm round their estimates, so that one can only observe $s_{ci}$. To account for the uncertainty induced by the rounding, I model $s_{ci}^{\*}$ as a latent parameter defined by
 
@@ -24,9 +24,11 @@ $$ s_{ci}^{\*}\ \sim\ \text{Beta}(\theta_{ci}N_i,(1-\theta_{ic})N_i) $$
 
 where $\theta_{ci}$ is defined as
 
-$$ \theta_{ci}\ \equiv\ \text{logit}^{-1}(\psi_c(date_i)\ +\ \mu_{cp\[i\]}\ +\ \lambda_{ch\[i\]}\ +\ M_i\lambda_{cm\[date_i\]}\ +\ X_i\beta_c(date_i)) $$
+$$ \theta_{ci}\ \equiv\ \text{logit}^{-1}(\psi_c(date_i)\ +\ \mu_{cp\[i\]}\ +\ \lambda_{ch\[i\]}\ +\ U_i\beta_c(date_i)\ +\ H_i\gamma_c) $$
 
-and $date_i$ is the date, centered so that $date_i\ =\ 1$ on February 26, 2026.
+and $date_i$ is the date, centered so that $date_i\ =\ 1$ on the day before candidate $c$'s first poll (February 26, 2026 for most candidates).
+
+$N_i$ is the number of respondents on which the published estimates of scenario $i$ are computed (e.g., respondents certain to vote who expressed a voting intention). When polling firms do not disclose it, I approximate it from the information available in the survey report.
 
 Two elements motivate the choice of approximating the posterior distribution by a series of Beta regression models, and not by a single multinomial model, which would arguably be the most logical choice:
 1. The Beta distribution allows me to model voting intentions directly instead of indirectly, via the number of respondents who indicated support for a given candidate. This is particularly convenient as the only estimates available, $s_{ci}$, is a rounded and adjusted proportion.
@@ -34,7 +36,7 @@ Two elements motivate the choice of approximating the posterior distribution by 
 
 ### Splines
 
-I model the evolutions of voting intentions over time with a spline of degree 3 with $K\ =\ 3$ knots:
+I model the evolutions of voting intentions over time with a spline of degree 3 with $K\ =\ 4$ knots ($K\ =\ 3$ for candidates observed over a short period of time, for whom the spline is only estimated over their observation period):
 
 $$ \psi_c(date_i)\ =\ \alpha_{c0}\cdot date_i\ +\ \sum_{k=1}^K\alpha_{ck}B_{3k}(date_i) $$
 
@@ -44,12 +46,23 @@ where $(B_{3k}(\cdot))\_k$ is a sequence of $B$-splines. I define a poll's date 
 
 In order to partially pool information among the various scenarios of the same poll, I include a candidate-specific poll effect $(\mu_{cp\[i\]})$, and I also adjust for house effects $(\lambda_{ch\[i\]})$.
 
-### United Left (except LFI) Adjustments
+### Scenario Effects
 
-$M_i$ is a (standardized) dummy that flags whether Fabien Roussel and Marine Tondelier were among the tested candidates.
+Polls test several scenarios that differ in the set of candidates. $H_i$ is a vector of (centered) dummies describing scenario $i$:
+- Gabriel Attal running instead of Édouard Philippe, or in addition to him;
+- François Hollande or Olivier Faure running instead of Raphaël Glucksmann;
+- François Ruffin running;
+- Marine Tondelier or Fabien Roussel not running;
+- David Lisnard running;
+- Dominique de Villepin running;
+- Marine Le Pen (rather than Jordan Bardella) as the RN candidate.
+
+Dummies that do not vary across the scenarios in which candidate $c$ is tested are dropped from candidate $c$'s model. The estimates are reported for a reference scenario: Marine Le Pen as the RN candidate, Édouard Philippe as the only centre-right candidate, Raphaël Glucksmann, Fabien Roussel and Marine Tondelier running, and neither François Ruffin nor Dominique de Villepin running. Gabriel Attal's estimates correspond to the scenario in which he runs instead of Édouard Philippe, and David Lisnard's to the scenario in which he runs alongside Édouard Philippe and Bruno Retailleau. Jordan Bardella and Marine Le Pen are modeled as a single RN candidate.
+
+Scenarios that include rarely tested candidates (Gérald Darmanin, Sébastien Lecornu, Bruno Le Maire, Ségolène Royal, Jérôme Guedj, Emmanuel Maurel, Sarah Knafo), that include neither Édouard Philippe nor Gabriel Attal, that do not include Bruno Retailleau or Éric Zemmour, or that do not include exactly one of Glucksmann, Hollande and Faure are excluded. Scenarios without Nicolas Dupont-Aignan are kept.
 
 ### Other Covariates
 
-The vector $X_i$ includes two (standardized) dummies that adjust for the subsample of respondents that the polling firm calculated their estimates on (all respondents, only respondents who are absolutely sure that they will vote in April 2027, or an intermediary subsample). To allow the effect of these covariates to vary as the election date gets closer, these coefficients incorporate a time trend:
+The vector $U_i$ includes two (standardized) dummies that adjust for the subsample of respondents that the polling firm calculated their estimates on (all respondents, only respondents who are absolutely sure that they will vote in April 2027, or an intermediary subsample). To allow the effect of these covariates to vary as the election date gets closer, these coefficients incorporate a time trend:
 
-$$ \beta_c^{(u)}(date_i)\ =\ \beta_{c0}^{(u)}\ +\ \nu_c(date_i\ -\ 1). $$
+$$ \beta_c^{(u)}(date_i)\ =\ \beta_{c0}^{(u)}\ +\ \nu_c^{(u)}(date_i\ -\ 1). $$
