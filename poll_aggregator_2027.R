@@ -24,7 +24,6 @@ library(readxl)
 library(HDInterval)
 library(splines)
 library(zoo)
-subset(systemfonts::system_fonts(), grepl("Open Sans Condensed", family))
 
 ## Commands & Functions ----
 
@@ -365,7 +364,7 @@ candidate_names <- c(
 candidate_labels <- c(
   "1" = "Arthaud", "2" = "Mélenchon", "3" = "Roussel", "4" = "Tondelier",
   "5" = "Glucksmann", "6" = "Philippe", "7" = "Retailleau", "8" = "Dupont-Aignan",
-  "9" = "Le Pen", "10" = "Zemmour", "11" = "Attal*", "12" = "Lisnard**"
+  "9" = "Le Pen", "10" = "Zemmour", "11" = "Attal", "12" = "Lisnard"
 )
 
 # First date at which each candidate was tested (day 1 of the candidate's spline)
@@ -384,334 +383,288 @@ plot_spline_estimates <- plot_spline_estimates %>%
   mutate(date = first_date + (day - 1)) # The spline starts at the candidate's first poll
 
 
-### Create plot
 
-# Define candidate colors
-candidate_colors <- c(
-  "Nathalie Arthaud" = "#ff1300",
-  "Jean-Luc Mélenchon" = "#b30d00",
-  "Fabien Roussel" = "#ff0099", 
-  "Marine Tondelier" = "#00b050",
-  "Raphaël Glucksmann" = "#ff6600",
-  "Édouard Philippe" = "#4e91f7",
-  "Bruno Retailleau" = "#0070c0",
-  "Nicolas Dupont-Aignan" = "#000000",
-  "Marine Le Pen" = "#002060",
-  "Éric Zemmour" = "#5b3c11",
-  "Gabriel Attal" = "#f2b705",
-  "David Lisnard" = "#7fa7d9"
+## Graph settings ----
+
+# Fonts: ITC Franklin Gothic, declared under the same family names for both devices:
+#   - systemfonts/ragg (PNG files), with tabular figures
+#   - quartz (PDF files): CoreText gives proper letter spacing, unlike cairo_pdf at small sizes
+#   "franklin":    plain = Book, bold = Demi
+#   "franklinmed": plain = Medium, bold = Heavy
+font_book <- "franklin"
+font_med  <- "franklinmed"
+local({
+  f <- systemfonts::system_fonts()
+  path <- function(style) {
+    x <- f[f$family == "ITC Franklin Gothic Std" & f$style == style, ][1, ]
+    list(x$path, x$index)
+  }
+  tab <- systemfonts::font_feature(numbers = c("lining", "tabular"))
+  systemfonts::register_font(font_book, plain = path("Book"), bold = path("Demi"), features = tab)
+  systemfonts::register_font(font_med,  plain = path("Medium"), bold = path("Heavy"), features = tab)
+  systemfonts::register_font("Franklin Demi (measure)", plain = path("Demi"))  # to measure bold labels
+})
+quartzFonts(
+  franklin    = c("ITCFranklinGothicStd-Book", "ITCFranklinGothicStd-Demi",
+                  "ITCFranklinGothicStd-BookIt", "ITCFranklinGothicStd-DemiIt"),
+  franklinmed = c("ITCFranklinGothicStd-Med", "ITCFranklinGothicStd-Hvy",
+                  "ITCFranklinGothicStd-MedIt", "ITCFranklinGothicStd-HvyIt")
 )
 
-# Generate plot: day to day
-poll_plot <- plot_spline_estimates %>% 
+# Dates
+last_date     <- max(plot_spline_estimates$date)
+election_date <- as.Date("2027-04-18")
+update_date   <- trimws(format(Sys.Date(), "%e %B %Y"))
+last_date_lab <- trimws(format(last_date, "%e %B %Y"))
+
+# French number format
+fr_pct <- function(x, digits = 1) paste0(formatC(x, format = "f", digits = digits, decimal.mark = ","), " %")
+
+# Party colours
+party_colors <- c(
+  "Nathalie Arthaud"      = "#8E1F2F",
+  "Jean-Luc Mélenchon"    = "#CF3A4B",
+  "Fabien Roussel"        = "#C2185B",
+  "Marine Tondelier"      = "#2E9A5A",
+  "Raphaël Glucksmann"    = "#E07B39",
+  "Édouard Philippe"      = "#3D85C6",
+  "Gabriel Attal"         = "#E0A91F",
+  "David Lisnard"         = "#7FA0C4",
+  "Bruno Retailleau"      = "#1F4E8C",
+  "Nicolas Dupont-Aignan" = "#5C5C5C",
+  "Marine Le Pen"         = "#1B2A4A",
+  "Éric Zemmour"          = "#7A5230"
+)
+
+# Mix a colour with white (p = share of the original colour)
+tint <- function(col, p) {
+  rgb_col <- grDevices::col2rgb(col) / 255
+  out <- p * rgb_col + (1 - p) * 1
+  grDevices::rgb(out[1, ], out[2, ], out[3, ])
+}
+
+# Darker version of a party colour, legible as text
+text_color <- function(col) {
+  rgb_col <- grDevices::col2rgb(col) / 255
+  l <- 0.2126 * rgb_col[1, ] + 0.7152 * rgb_col[2, ] + 0.0722 * rgb_col[3, ]
+  k <- ifelse(l > .45, .62, ifelse(l > .3, .85, 1))
+  grDevices::rgb(rgb_col[1, ] * k, rgb_col[2, ] * k, rgb_col[3, ] * k)
+}
+
+# Ink colours
+ink_1    <- "#111111"
+ink_2    <- "#555555"
+ink_3    <- "#8C8C8C"
+grid_col <- "#E4E4E4"
+base_col <- "#3A3A3A"
+
+# Source note
+source_text <- paste0(
+  "Source : enquêtes Cluster17, Elabe, Harris Interactive, Ifop, Ipsos-BVA, Odoxa, OpinionWay, Verian et YouGov ",
+  "réalisées depuis février 2026 (rapports d'enquête publiés sur le site de la Commission des sondages), agrégées ",
+  "à l'aide d'un modèle bayésien tenant compte des principales caractéristiques des enquêtes. Gabriel Attal : ",
+  "scénario où il est candidat à la place d'Édouard Philippe ; David Lisnard : scénario où il est candidat en plus ",
+  "d'Édouard Philippe et de Bruno Retailleau. Dernière mise à jour : ", update_date, "."
+)
+
+# Latest estimates, highest first
+latest <- plot_spline_estimates %>%
+  filter(date == last_date) %>%
+  mutate(across(c(median, starts_with("lower"), starts_with("upper")), ~ .x * 100)) %>%
+  arrange(desc(median)) %>%
   mutate(
-    label = if_else(
-      date == max(date), 
-      paste0(
-        as.character(label_candidate), 
-        " (", unlist(lapply(median*1000, round))/10, "%)"
-      ),
-      NA_character_
-    ),
-    median_label = case_when(
-      #candidate == "Liste LFI" ~ median + .002,
-      #candidate == "Liste LR" ~ median - .005,
-      #candidate == "Liste DLF" ~ median - .003,
-      !is.na(candidate) ~ median)
-    ) %>% 
-  group_by(candidate) %>% 
+    short = candidate_labels[as.character(id_candidate)],
+    value = fr_pct(median)
+  )
+cand_order <- as.character(latest$candidate)
+
+# Month labels, with the year on the first month and on January
+month_labels <- function(x) {
+  x <- as.Date(x)
+  lab <- sub("\\.$", "", format(x, "%b"))
+  first <- !is.na(x) & seq_along(x) == min(which(!is.na(x)))
+  add_year <- !is.na(x) & (format(x, "%m") == "01" | first)
+  ifelse(add_year, paste0(lab, "\n", format(x, "%Y")), lab)
+}
+
+# Spread label positions vertically so that they are at least `gap` apart
+spread_labels <- function(y, gap, lo = -Inf, hi = Inf) {
+  o <- order(y); z <- y[o]
+  for (iter in 1:200) {
+    moved <- FALSE
+    for (i in seq_along(z)[-1]) {
+      d <- z[i] - z[i - 1]
+      if (d < gap) { shift <- (gap - d) / 2; z[i] <- z[i] + shift; z[i - 1] <- z[i - 1] - shift; moved <- TRUE }
+    }
+    z <- pmin(pmax(z, lo), hi)
+    if (!moved) break
+  }
+  out <- numeric(length(y)); out[o] <- z; out
+}
+
+# Common theme
+theme_polls <- function() {
+  theme_minimal(base_family = font_book, base_size = 9) +
+    theme(
+      plot.background    = element_rect(fill = "white", color = NA),
+      panel.grid         = element_blank(),
+      axis.title         = element_blank(),
+      axis.text          = element_text(color = ink_3, size = 7.5),
+      plot.title         = element_text(face = "bold", size = 14, color = ink_1, lineheight = 1.05,
+                                        margin = margin(b = 4)),
+      plot.subtitle      = element_text(size = 9.3, color = ink_2, lineheight = 1.25, margin = margin(b = 12)),
+      plot.caption       = element_text(size = 6.4, color = ink_3, hjust = 0, lineheight = 1.3,
+                                        margin = margin(t = 12)),
+      plot.title.position   = "plot",
+      plot.caption.position = "plot",
+      legend.position    = "none",
+      plot.margin        = margin(16, 16, 10, 16)
+    )
+}
+
+# Export as PNG (ragg, 400 dpi) and PDF (quartz, fonts embedded)
+save_graph <- function(p, name, width, height) {
+  ggsave(paste0(name, ".png"), p, width = width, height = height, dpi = 400,
+         device = ragg::agg_png, bg = "white")
+  quartz(type = "pdf", file = paste0(name, ".pdf"), width = width, height = height, bg = "white")
+  print(p)
+  invisible(dev.off())
+}
+
+# Plot sizes (inches)
+evo_size  <- c(7.5, 5)
+inst_size <- c(7.5, 5.6)
+
+
+
+## Evolution plot: create and export ----
+
+x_min    <- min(plot_spline_estimates$date) - 20  # room for the inline y labels
+x_max    <- last_date + 95
+x_name   <- last_date + 9
+y_breaks <- seq(10, 40, 10)
+label_size <- 2.75
+value_size <- 2.4
+
+# Label positions: name (bold), then value right after it
+days_per_in <- as.numeric(x_max - x_min) / (evo_size[1] - 32 / 72)
+name_width  <- systemfonts::string_width(latest$short, family = "Franklin Demi (measure)",
+                                         size = label_size * .pt, res = 72) / 72
+evo_labels <- latest %>%
   mutate(
-    lower50_l = zoo::rollmean(lower50, k = 2, align = "left", fill = NA),
-    lower50_r = zoo::rollmean(lower50, k = 2, align = "right", fill = NA),
-    upper50_l = zoo::rollmean(upper50, k = 2, align = "left", fill = NA),
-    upper50_r = zoo::rollmean(upper50, k = 2, align = "right", fill = NA),
-    lower95_l = zoo::rollmean(lower95, k = 2, align = "left", fill = NA),
-    lower95_r = zoo::rollmean(lower95, k = 2, align = "right", fill = NA),
-    upper95_l = zoo::rollmean(upper95, k = 2, align = "left", fill = NA),
-    upper95_r = zoo::rollmean(upper95, k = 2, align = "right", fill = NA),
-    lower50_s = zoo::rollmean(lower50, k = 3, fill = NA),
-    upper50_s = zoo::rollmean(upper50, k = 3, fill = NA),
-    lower95_s = zoo::rollmean(lower95, k = 3, fill = NA),
-    upper95_s = zoo::rollmean(upper95, k = 3, fill = NA),
-    lower50_s = ifelse(is.na(lower50_s), lower50_l, lower50_s),
-    lower50_s = ifelse(is.na(lower50_s), lower50_r, lower50_s),
-    upper50_s = ifelse(is.na(upper50_s), upper50_l, upper50_s),
-    upper50_s = ifelse(is.na(upper50_s), upper50_r, upper50_s),
-    lower95_s = ifelse(is.na(lower95_s), lower95_l, lower95_s),
-    lower95_s = ifelse(is.na(lower95_s), lower95_r, lower95_s),
-    upper95_s = ifelse(is.na(upper95_s), upper95_l, upper95_s),
-    upper95_s = ifelse(is.na(upper95_s), upper95_r, upper95_s)
-  ) %>% 
-  filter(date > as.Date("2025-03-01")) %>% 
-  ggplot(aes(
-    x = date, 
-    group = candidate, 
-    color = candidate
-  )) +
-  
-  # Plot data
-  geom_line(aes(y = median * 100)) +
-  geom_ribbon(aes(ymin = lower50_s * 100, 
-                  ymax = upper50_s * 100, 
-                  fill = candidate), 
-              alpha = .1, 
-              color = NA) +
-  geom_ribbon(aes(ymin = lower95_s * 100, 
-                  ymax = upper95_s * 100, 
-                  fill = candidate), 
-              alpha = .1, 
-              color = NA) +
-  
-  # Candidate labels
-  geom_text(aes(x = date + 2, 
-                y = median_label * 100 - .3, 
-                label = label), 
-            na.rm = TRUE,
-            hjust = 0, 
-            vjust = 0, 
-            nudge_y = -.1, 
-            family = "Open Sans Condensed", 
-            size = 3) +
-  
-  # Show latest poll's date
-  annotate(
-    "segment", 
-    x = max(plot_spline_estimates$date), 
-    y = 0, 
-    xend = max(plot_spline_estimates$date), 
-    yend = 43.5,
-    size = .4
+    y_lab = spread_labels(median, gap = 1.75, lo = 1.1),
+    x_val = x_name + (name_width * 1.06 + .045) * days_per_in,  # small margin for rendering differences
+    col   = text_color(party_colors[as.character(candidate)])
+  )
+
+poll_plot <- ggplot(plot_spline_estimates, aes(x = date)) +
+
+  # Grid and inline y labels
+  geom_hline(yintercept = y_breaks, color = grid_col, linewidth = .25) +
+  annotate("text", x = x_min, y = y_breaks + .5, label = ifelse(y_breaks == 40, "40 %", y_breaks),
+           family = font_book, size = 2.6, color = ink_3, hjust = 0, vjust = 0) +
+  geom_hline(yintercept = 0, color = base_col, linewidth = .35) +
+
+  # Latest poll
+  annotate("segment", x = last_date, xend = last_date, y = 0, yend = 41.5, color = "#BDBDBD", linewidth = .25) +
+  annotate("text", x = last_date - 3, y = 41.5, label = paste("Dernier sondage :", last_date_lab),
+           family = font_book, size = 2.5, color = ink_2, hjust = 1, vjust = 1) +
+
+  # Medians (main candidates drawn last, on top)
+  lapply(rev(cand_order), function(cand) {
+    geom_line(data = plot_spline_estimates %>% filter(candidate == cand), aes(y = median * 100),
+              color = party_colors[cand], linewidth = .7, lineend = "round")
+  }) +
+  geom_point(data = latest, aes(y = median, fill = candidate), shape = 21, size = 1.6,
+             color = "white", stroke = .6) +
+
+  # Labels
+  geom_segment(data = evo_labels, aes(x = last_date + 3, xend = x_name - 2, y = median, yend = y_lab),
+               color = "#C8C8C8", linewidth = .2) +
+  geom_text(data = evo_labels, aes(x = x_name, y = y_lab - .42, label = short, color = I(col)),
+            family = font_book, fontface = "bold", size = label_size, hjust = 0, vjust = 0) +
+  geom_text(data = evo_labels, aes(x = x_val, y = y_lab - .42, label = value, color = I(col)),
+            family = font_book, size = value_size, hjust = 0, vjust = 0) +
+
+  scale_fill_manual(values = party_colors) +
+  scale_x_date(breaks = seq(as.Date("2026-03-01"), last_date, by = "1 month"),
+               labels = month_labels, expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(xlim = c(x_min, x_max), ylim = c(0, 42), clip = "off") +
+  labs(
+    title = "Intentions de vote au premier tour de la présidentielle 2027",
+    subtitle = paste0("Estimation de l'agrégateur (médiane des distributions a posteriori), en % des suffrages exprimés.\n",
+                      "Premier tour le ", trimws(format(election_date, "%e %B %Y")), "."),
+    caption = str_wrap(source_text, 165)
   ) +
-  annotate(
-    geom = "text", 
-    x = max(plot_spline_estimates$date), 
-    y = 44.75, 
-    family = "Open Sans Condensed",
-    label = format(max(plot_spline_estimates$date), "%d %B %Y"),
-    size = 3
-  ) +
-  
-  # Show election date
-  annotate(
-    "segment",
-    x = as.Date("2027-04-18"), 
-    y = 0, 
-    xend = as.Date("2027-04-18"), 
-    yend = 43.5,
-    size = .4
-  ) +
-  annotate(
-    geom = "text", 
-    x = as.Date("2027-04-18"), 
-    y = 44.75, 
-    label = "Premier tour", 
-    family = "Open Sans Condensed",
-    size = 3
-  ) +
-  
-  # Define labs
-  labs(x = "", 
-       y = "Intentions de votes (% votes exprimés)",
-       title = "Intentions de vote à l'élection présidentielle française de 2027",
-       subtitle = "Depuis février 2026",
-       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa, OpinionWay, Verian et YouGov depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à l'aide d'un modèle bayésien tenant compte \ndes principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 50%). Pour chaque candidat, la ligne solide relie les médianes des distributions a posteriori à chaque date, et la zone colorée représente la partie la plus dense de la distribution a posteriori (95% / 50%) des \ndistributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".\n* Gabriel Attal : scénario où il est candidat à la place d'Édouard Philippe. ** David Lisnard : scénario où il est candidat en plus d'Édouard Philippe et de Bruno Retailleau.")) +
-  
-  # Specify plot theme
-  theme_minimal() +
+  theme_polls() +
   theme(
-    panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_blank(),
-    panel.grid.major.y = element_line(color = "#2b2b2b", 
-                                      linetype = "dotted", 
-                                      size = 0.05),
-    text = element_text(family = "Open Sans Condensed", 
-                        size = 7.5),
-    axis.text = element_text(size = 8),
-    axis.text.x = element_text(hjust = 0),
-    axis.text.y = element_text(margin = margin(r = -2)),
-    axis.title = element_blank(),
-    axis.line.x = element_line(color = "#2b2b2b", 
-                               size = 0.15),
-    axis.ticks.x = element_line(color = "#2b2b2b", 
-                                size = 0.15),
-    axis.ticks.length = unit(.2, "cm"),
-    plot.title = element_text(size = 20, 
-                              family = "Open Sans Condensed", 
-                              face = "bold"),
-    plot.title.position = "plot",
-    plot.subtitle = element_text(size = 12),
-    legend.position = "none",
-    plot.caption = element_text(color = "gray30", 
-                                hjust = 0, 
-                                margin = margin(t = 15)),
-    plot.margin = unit(rep(0.5, 4), "cm")
-  ) +
-  
-  # Candidate colors
-  guides(color = guide_legend(nrow = 3, byrow = TRUE)) +
-  scale_colour_manual(values = candidate_colors) +
-  scale_fill_manual(values = candidate_colors) +
-  
-  # Date axis
-  scale_x_date(
-    expand = c(.005,1), 
-    date_breaks = "1 month",
-    date_labels = "%B",
-    limits = c(as.Date("2026-03-01"), as.Date("2027-05-15"))
-  ) +
-  
-  # Percent axis
-  scale_y_continuous(
-    labels = function(x) paste0(x, "%"), 
-    expand = c(0, 0),
-    breaks = seq(0, 40, 5),
-    lim = c(0, 46.5)
+    axis.text.y  = element_blank(),
+    axis.ticks.x = element_line(color = base_col, linewidth = .25),
+    axis.ticks.length.x = unit(2.5, "pt"),
+    axis.text.x  = element_text(margin = margin(t = 3), lineheight = 1.1)
   )
 
+save_graph(poll_plot, "polls_france27_evolution", evo_size[1], evo_size[2])
 
 
-## Export plot
-ggsave(poll_plot, 
-       filename = "polls_france27_evolution.pdf",
-       height = 6, 
-       width = 10, 
-       device = cairo_pdf)
-ggsave(poll_plot, 
-       filename = "polls_france27_evolution.png",
-       height = 6, 
-       width = 10, 
-       device = "png", 
-       bg = "white")
 
+## Current estimate plot: create and export ----
 
-## Current estimate plot ----
+inst <- latest %>% mutate(row = rev(seq_len(n())))
+n_c  <- nrow(inst)
+x_breaks <- seq(0, 40, 10)
 
-## Prepare table
+# Key for the four credible intervals
+key_x <- c(25.5, 28.6, 31.7, 34.8)
+key   <- tibble(xmin = key_x, xmax = key_x + 2.4, p = c(.85, .6, .4, .22),
+                lab = c("50 %", "80 %", "90 %", "95 %"))
+band <- function(lo, hi, p) {
+  geom_linerange(aes(xmin = .data[[lo]], xmax = .data[[hi]],
+                     color = I(tint(party_colors[as.character(candidate)], p))), linewidth = 2.6)
+}
 
-plot_inst_estimates <- plot_spline_estimates %>% 
-  filter(date == max(date))  %>%
-  mutate(
-    label = paste0(unlist(lapply(median*1000, round))/10, "%"),
-    label = ifelse(label == "0.5%", "   0.5%", label)
+inst_plot <- inst %>%
+  ggplot(aes(y = row)) +
+
+  # Grid, baseline and x labels
+  annotate("segment", x = x_breaks[-1], xend = x_breaks[-1], y = .5, yend = n_c + .5,
+           color = grid_col, linewidth = .25) +
+  annotate("segment", x = 0, xend = 0, y = .5, yend = n_c + .5, color = base_col, linewidth = .35) +
+  annotate("text", x = x_breaks, y = .3, label = ifelse(x_breaks == 40, "40 %", x_breaks),
+           family = font_book, size = 2.6, color = ink_3, vjust = 1) +
+
+  # Credible intervals, medians and values
+  band("lower95", "upper95", .22) +
+  band("lower90", "upper90", .40) +
+  band("lower80", "upper80", .60) +
+  band("lower50", "upper50", .85) +
+  geom_point(aes(x = median, fill = candidate), shape = 21, size = 2.3, color = "white", stroke = .7) +
+  geom_text(aes(x = upper95 + .6, label = value), family = font_book, fontface = "bold", size = 2.85,
+            color = ink_1, hjust = 0) +
+
+  # Key
+  annotate("rect", xmin = key$xmin, xmax = key$xmax, ymin = n_c + .78, ymax = n_c + .98,
+           fill = ink_2, alpha = key$p) +
+  annotate("text", x = (key$xmin + key$xmax) / 2, y = n_c + 1.12, label = key$lab,
+           family = font_book, size = 2.2, color = ink_2, vjust = 0) +
+  annotate("text", x = key_x[1] - .6, y = n_c + .88, label = "Intervalles de crédibilité",
+           family = font_book, size = 2.2, color = ink_2, hjust = 1) +
+
+  scale_fill_manual(values = party_colors) +
+  scale_x_continuous(expand = c(0, 0)) +
+  scale_y_continuous(breaks = inst$row, labels = as.character(inst$candidate),
+                     expand = expansion(add = c(.85, 1.35))) +
+  coord_cartesian(xlim = c(0, 42), clip = "off") +
+  labs(
+    title = "Intentions de vote au premier tour de la présidentielle 2027",
+    subtitle = paste0("Estimation de l'agrégateur au ", last_date_lab, ", en % des suffrages exprimés."),
+    caption = str_wrap(source_text, 165)
+  ) +
+  theme_polls() +
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(family = font_med, size = 8.6, color = ink_1, margin = margin(r = 7))
   )
-plot_inst_estimates$candidate <- factor(
-  plot_inst_estimates$candidate,
-  levels = as.vector(plot_inst_estimates$candidate[rev(order(plot_inst_estimates$median))])
-)
 
-## Create plot
-
-# Define candidate colors
-candidate_colors <- c(
-  "Nathalie Arthaud" = "#ff1300",
-  "Jean-Luc Mélenchon" = "#b30d00",
-  "Fabien Roussel" = "#ff0099", 
-  "Marine Tondelier" = "#00b050",
-  "Raphaël Glucksmann" = "#ff6600",
-  "Édouard Philippe" = "#4e91f7",
-  "Bruno Retailleau" = "#0070c0",
-  "Nicolas Dupont-Aignan" = "#000000",
-  "Marine Le Pen" = "#002060",
-  "Éric Zemmour" = "#5b3c11",
-  "Gabriel Attal" = "#f2b705",
-  "David Lisnard" = "#7fa7d9"
-)
-
-# Generate plot: last estimate
-inst_plot <- plot_inst_estimates %>% 
-  ggplot(aes(x = candidate, color = candidate)) +
-  
-  # Plot data
-  geom_linerange(aes(ymin = lower50 * 100, 
-                     ymax = upper50 * 100), 
-                 alpha = .2, 
-                 size = 10) +
-  geom_linerange(aes(ymin = lower80 * 100, 
-                     ymax = upper80 * 100), 
-                 alpha = .2, 
-                 size = 10) +
-  geom_linerange(aes(ymin = lower90 * 100, 
-                     ymax = upper90 * 100), 
-                 alpha = .2, 
-                 size = 10) +
-  geom_linerange(aes(ymin = lower95 * 100, 
-                     ymax = upper95 * 100), 
-                 alpha = .2, 
-                 size = 10) +
-  geom_linerange(aes(ymin = median * 100 - .05, 
-                     ymax = median * 100 + .05), 
-                 size = 12, 
-                 color = "white") +
-  geom_linerange(aes(ymin = median * 100 - .02, 
-                     ymax = median * 100 + .02), 
-                 size = 11) +
-  geom_text(aes(label = label, 
-                y = median * 100), 
-            family = "Open Sans Condensed SemiBold", 
-            vjust = -1.65) +
-  
-  # Define labs
-  labs(x = "", 
-       y = "Intentions de votes (% votes exprimés)",
-       title = "Intentions de vote à l'élection présidentielle française de 2027",
-       subtitle = paste("Au", format(Sys.time(), "%d %B %Y")),
-       caption = paste0("Estimations obtenues à partir des enquêtes d'opinion réalisées par Cluster17, Elabe, Harris Interactive, IFOP, IPSOS-BVA, Odoxa, OpinionWay, Verian et YouGov depuis février 2026 sur la base des rapports d'enquête publiés sur le site de la Commission des sondages, et agrégées à \nl'aide d'un modèle bayésien tenant compte des principales caractéristiques des enquêtes. Le graphique présente les médianes et intervalles de crédibilité (95% / 90% / 80% / 50%) des distributions a posteriori. Dernière mise à jour : ", format(Sys.time(), "%d %B %Y"), ".\n* Gabriel Attal : scénario où il est candidat à la place d'Édouard Philippe. ** David Lisnard : scénario où il est candidat en plus d'Édouard Philippe et de Bruno Retailleau.")) +
-  
-  # Specify plot theme
-  coord_flip() +
-  theme_minimal() +
-  theme(panel.grid.minor = element_blank(),
-        panel.grid.major.x = element_line(color = "#2b2b2b", 
-                                          linetype = "dotted", 
-                                          size = 0.05),
-        panel.grid.major.y = element_line(color = "gray99", 
-                                          size = 10),
-        text = element_text(family = "Open Sans Condensed", 
-                            size = 7.5),
-        axis.text.x = element_text(size = 10),
-        axis.text.y = element_text(size = 12, 
-                                   family = "Open Sans Condensed", 
-                                   face = "bold"),
-        axis.title = element_blank(),
-        axis.line.x = element_line(color = "#2b2b2b", 
-                                   size = 0.15),
-        axis.ticks.x = element_line(color = "#2b2b2b", 
-                                    size = 0.15),
-        axis.ticks.length = unit(.2, "cm"),
-        plot.title = element_text(size = 20, 
-                                  family = "Open Sans Condensed ExtraBold", 
-                                  face = "bold"),
-        plot.subtitle = element_text(size = 15),
-        plot.title.position = "plot",
-        legend.position = "none",
-        plot.caption = element_text(color = "gray30", 
-                                    hjust = 0, 
-                                    margin = margin(t = 15)),
-        plot.margin = unit(rep(0.5, 4), "cm")) +
-  
-  # Candidate colors
-  guides(color = guide_legend(nrow = 3, byrow = TRUE)) +
-  scale_colour_manual(values = candidate_colors) +
-  scale_fill_manual(values = candidate_colors) +
-  
-  # Percent axis
-  scale_y_continuous(labels = function(x) paste0(x, "%"), 
-                     expand = c(0, 0), 
-                     breaks = seq(0, 40, 5), 
-                     lim = c(0, 43.5))
-
-
-## Export plot
-ggsave(inst_plot, 
-       filename = "polls_france27_latest.pdf",
-       height = 7.5, 
-       width = 10,
-       device = cairo_pdf)
-ggsave(inst_plot, 
-       filename = "polls_france27_latest.png",
-       height = 7.5, 
-       width = 10, 
-       device = "png", 
-       bg = "white")
-
-
+save_graph(inst_plot, "polls_france27_latest", inst_size[1], inst_size[2])
