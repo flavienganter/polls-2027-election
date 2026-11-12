@@ -59,7 +59,7 @@ Polls test several scenarios that differ in the set of candidates. $H_i$ is a ve
 
 Dummies that do not vary across the scenarios in which candidate $c$ is tested are dropped from candidate $c$'s model. The estimates are reported for a reference scenario: Marine Le Pen as the RN candidate, Édouard Philippe as the only centre-right candidate, Raphaël Glucksmann, Fabien Roussel and Marine Tondelier running, and neither François Ruffin nor Dominique de Villepin running. Gabriel Attal's estimates correspond to the scenario in which he runs instead of Édouard Philippe, and David Lisnard's to the scenario in which he runs alongside Édouard Philippe and Bruno Retailleau. Jordan Bardella and Marine Le Pen are modeled as a single RN candidate.
 
-Scenarios that include rarely tested candidates (Gérald Darmanin, Sébastien Lecornu, Bruno Le Maire, Ségolène Royal, Jérôme Guedj, Emmanuel Maurel, Sarah Knafo), that include neither Édouard Philippe nor Gabriel Attal, that do not include Bruno Retailleau or Éric Zemmour, or that do not include exactly one of Glucksmann, Hollande and Faure are excluded. Scenarios without Nicolas Dupont-Aignan are kept.
+Scenarios that include rarely tested candidates (Gérald Darmanin, Sébastien Lecornu, Bruno Le Maire, Ségolène Royal, Jérôme Guedj, Emmanuel Maurel, Sarah Knafo, Christine Lagarde, Teddy Riner, François Asselineau), that include neither Édouard Philippe nor Gabriel Attal, that do not include Bruno Retailleau or Éric Zemmour, or that do not include exactly one of Glucksmann, Hollande and Faure are excluded. Scenarios without Nicolas Dupont-Aignan are kept.
 
 ### Other Covariates
 

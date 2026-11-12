@@ -113,7 +113,8 @@ data_wide <- read_excel("polls_data_2027.xlsx") %>%
     (!is.na(c_glcks)) + (!is.na(c_hlld)) + (!is.na(c_faure)) == 1,      # Exactly one PS candidate
     !is.na(c_philp) | !is.na(c_attl),                                    # Philippe and/or Attal
     !is.na(c_rtll),                                                      # Retailleau running
-    !is.na(c_zemmr), is.na(c_knafo)                                      # Zemmour (not Knafo)
+    !is.na(c_zemmr), is.na(c_knafo),                                     # Zemmour (not Knafo)
+    is.na(c_lagarde), is.na(c_riner), is.na(c_asselineau)                # Rarely tested candidates
   ) %>%
 
   # Scenario dummies
