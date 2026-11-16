@@ -297,7 +297,7 @@ model_code <- cmdstan_model("model_bycand.stan")
 # Estimate model
 estimated_spline_model <- model_code$sample(
   data            = data_spline_model,
-  seed            = 94836,
+  seed            = 94837,
   chains          = 4,
   parallel_chains = 4,
   iter_warmup     = 2000,
